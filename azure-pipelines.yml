@@ -1,0 +1,28 @@
+trigger:
+  - none
+
+name: $(date:yyyyMMdd)$(rev:.r)
+
+variables:
+  appServiceName: "reactjsopenai"
+  resourceGroup: "rg_openai_poc"
+  azureSubscription: "SPN_AI_Enterprise"
+  imageName: "flowise:$(Build.BuildNumber)"
+
+stages:
+  - stage: Build
+    displayName: "Build Docker Image"
+    jobs:
+      - job: Build
+        displayName: "Build"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: Docker@2
+            inputs:
+              containerRegistry: "ACR_Service_Connection"
+              repository: "flowise"
+              command: "buildAndPush"
+              Dockerfile: "**/Dockerfile"
+              tags: "$(Build.BuildNumber)"
+            displayName: "Build and push Docker image"
