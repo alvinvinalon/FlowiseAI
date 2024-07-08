@@ -1,6 +1,6 @@
 // Update the function to return the top three URLs from Bing search results
 async function bingWebSearch(query) {
-    const SUBSCRIPTION_KEY = 'eab1ea2365354e42b7f354fb0451ee63'
+    const SUBSCRIPTION_KEY = process.env.BING_API_KEY
     if (!SUBSCRIPTION_KEY) {
         throw new Error('Missing the AZURE_SUBSCRIPTION_KEY environment variable')
     }
