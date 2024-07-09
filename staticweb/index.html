@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Flowise Showcase</title>
+        <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+    </head>
+
+    <body class="bg-gray-100">
+        <div class="min-h-screen flex flex-col justify-center items-center">
+            <div class="text-center">
+                <h1 class="text-4xl font-bold text-gray-800 mb-4">Welcome to this Flowise Showcase</h1>
+                <p class="text-gray-600 mb-8">Experience the future of customer interaction with advanced chatbot build with Flowise.</p>
+            </div>
+            <div class="bg-white shadow-md rounded-lg p-6 max-w-md mx-auto">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Get in Touch</h2>
+                <p class="text-gray-600 mb-6">
+                    Have questions? Our team is here to help. Click the chat icon at the bottom right corner to start a conversation with
+                    us.
+                </p>
+                <div class="flex justify-center">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-full">Start Chat</button>
+                </div>
+            </div>
+        </div>
+        <script type="module">
+            import Chatbot from 'https://cdn.jsdelivr.net/npm/flowise-embed/dist/web.js'
+            Chatbot.init({
+                chatflowid: '2faa5b77-2455-4cca-bdac-db9de0141d02',
+                apiHost: 'http://localhost:3000',
+                chatflowConfig: {
+                    // topK: 2
+                },
+                theme: {
+                    button: {
+                        backgroundColor: '#3B81F6',
+                        right: 20,
+                        bottom: 20,
+                        size: 48, // small | medium | large | number
+                        dragAndDrop: true,
+                        iconColor: 'white',
+                        customIconSrc: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/google-messages.svg'
+                    },
+                    tooltip: {
+                        showTooltip: true,
+                        tooltipMessage: 'Hi There 👋!',
+                        tooltipBackgroundColor: 'black',
+                        tooltipTextColor: 'white',
+                        tooltipFontSize: 16
+                    },
+                    chatWindow: {
+                        showTitle: true,
+                        title: 'Customer Service',
+                        titleAvatarSrc: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/main/svg/google-messages.svg',
+                        showAgentMessages: true,
+                        welcomeMessage: "Welcome to Alvin's TechGears. How can I help you today?",
+                        errorMessage: 'This is a custom error message',
+                        backgroundColor: '#ffffff',
+                        height: 700,
+                        width: 400,
+                        fontSize: 14,
+                        poweredByTextColor: '#303235',
+                        botMessage: {
+                            backgroundColor: '#f7f8ff',
+                            textColor: '#303235',
+                            showAvatar: true,
+                            avatarSrc: 'https://strgopenaipoc.blob.core.windows.net/public/Designer-3-Small.jpg'
+                        },
+                        userMessage: {
+                            backgroundColor: '#3B81F6',
+                            textColor: '#ffffff',
+                            showAvatar: true,
+                            avatarSrc: 'https://raw.githubusercontent.com/zahidkhawaja/langchain-chat-nextjs/main/public/usericon.png'
+                        },
+                        textInput: {
+                            placeholder: 'Type your question',
+                            backgroundColor: '#ffffff',
+                            textColor: '#303235',
+                            sendButtonColor: '#3B81F6',
+                            maxChars: 200,
+                            maxCharsWarningMessage: 'You exceeded the characters limit. Please input less than 50 characters.',
+                            autoFocus: true, // If not used, autofocus is disabled on mobile and enabled on desktop. true enables it on both, false disables it on both.
+                            sendMessageSound: true,
+                            // sendSoundLocation: "send_message.mp3", // If this is not used, the default sound effect will be played if sendSoundMessage is true.
+                            receiveMessageSound: true
+                            // receiveSoundLocation: "receive_message.mp3", // If this is not used, the default sound effect will be played if receiveSoundMessage is true.
+                        },
+                        feedback: {
+                            color: '#303235'
+                        },
+                        footer: {
+                            textColor: '#303235',
+                            text: 'Powered by',
+                            company: 'Flowise',
+                            companyLink: 'https://alvinstechgears.io'
+                        }
+                    }
+                }
+            })
+        </script>
+    </body>
+</html>
