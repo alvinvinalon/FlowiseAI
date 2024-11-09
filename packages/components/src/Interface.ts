@@ -118,6 +118,7 @@ export interface INodeProperties {
     deprecateMessage?: string
     hideOutput?: boolean
     author?: string
+    documentation?: string
 }
 
 export interface INode extends INodeProperties {
@@ -129,7 +130,7 @@ export interface INode extends INodeProperties {
     vectorStoreMethods?: {
         upsert: (nodeData: INodeData, options?: ICommonObject) => Promise<IndexingResult | void>
         search: (nodeData: INodeData, options?: ICommonObject) => Promise<any>
-        delete: (nodeData: INodeData, options?: ICommonObject) => Promise<void>
+        delete: (nodeData: INodeData, ids: string[], options?: ICommonObject) => Promise<void>
     }
     init?(nodeData: INodeData, input: string, options?: ICommonObject): Promise<any>
     run?(nodeData: INodeData, input: string, options?: ICommonObject): Promise<string | ICommonObject>
@@ -395,3 +396,48 @@ export interface IVisionChatModal {
     revertToOriginalModel(): void
     setMultiModalOption(multiModalOption: IMultiModalOption): void
 }
+export interface IStateWithMessages extends ICommonObject {
+    messages: BaseMessage[]
+    [key: string]: any
+}
+
+export interface IServerSideEventStreamer {
+    streamEvent(chatId: string, data: string): void
+    streamStartEvent(chatId: string, data: any): void
+
+    streamTokenEvent(chatId: string, data: string): void
+    streamCustomEvent(chatId: string, eventType: string, data: any): void
+
+    streamSourceDocumentsEvent(chatId: string, data: any): void
+    streamUsedToolsEvent(chatId: string, data: any): void
+    streamFileAnnotationsEvent(chatId: string, data: any): void
+    streamToolEvent(chatId: string, data: any): void
+    streamAgentReasoningEvent(chatId: string, data: any): void
+    streamNextAgentEvent(chatId: string, data: any): void
+    streamActionEvent(chatId: string, data: any): void
+    streamArtifactsEvent(chatId: string, data: any): void
+    streamAbortEvent(chatId: string): void
+    streamEndEvent(chatId: string): void
+}
+
+export enum FollowUpPromptProvider {
+    ANTHROPIC = 'chatAnthropic',
+    AZURE_OPENAI = 'azureChatOpenAI',
+    GOOGLE_GENAI = 'chatGoogleGenerativeAI',
+    MISTRALAI = 'chatMistralAI',
+    OPENAI = 'chatOpenAI'
+}
+
+export type FollowUpPromptProviderConfig = {
+    [key in FollowUpPromptProvider]: {
+        credentialId: string
+        modelName: string
+        prompt: string
+        temperature: string
+    }
+}
+
+export type FollowUpPromptConfig = {
+    status: boolean
+    selectedProvider: FollowUpPromptProvider
+} & FollowUpPromptProviderConfig

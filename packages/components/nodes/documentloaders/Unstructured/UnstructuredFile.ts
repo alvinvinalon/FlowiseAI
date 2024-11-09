@@ -61,9 +61,10 @@ class UnstructuredFile_DocumentLoaders implements INode {
                 label: 'Unstructured API URL',
                 name: 'unstructuredAPIUrl',
                 description:
-                    'Unstructured API URL. Read <a target="_blank" href="https://unstructured-io.github.io/unstructured/introduction.html#getting-started">more</a> on how to get started',
+                    'Unstructured API URL. Read <a target="_blank" href="https://docs.unstructured.io/api-reference/api-services/saas-api-development-guide">more</a> on how to get started',
                 type: 'string',
-                default: 'http://localhost:8000/general/v0/general'
+                placeholder: process.env.UNSTRUCTURED_API_URL || 'http://localhost:8000/general/v0/general',
+                optional: !!process.env.UNSTRUCTURED_API_URL
             },
             {
                 label: 'Strategy',
@@ -496,6 +497,7 @@ class UnstructuredFile_DocumentLoaders implements INode {
                 const chatflowid = options.chatflowid
 
                 for (const file of files) {
+                    if (!file) continue
                     const fileData = await getFileFromStorage(file, chatflowid)
                     const loaderDocs = await loader.loadAndSplitBuffer(fileData, file)
                     docs.push(...loaderDocs)
@@ -508,6 +510,7 @@ class UnstructuredFile_DocumentLoaders implements INode {
                 }
 
                 for (const file of files) {
+                    if (!file) continue
                     const splitDataURI = file.split(',')
                     const filename = splitDataURI.pop()?.split(':')[1] ?? ''
                     const bf = Buffer.from(splitDataURI.pop() || '', 'base64')

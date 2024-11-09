@@ -1,7 +1,7 @@
 import { get } from 'lodash'
 import { z } from 'zod'
 import { DataSource } from 'typeorm'
-import { NodeVM } from 'vm2'
+import { NodeVM } from '@flowiseai/nodevm'
 import { StructuredTool } from '@langchain/core/tools'
 import { ChatMistralAI } from '@langchain/mistralai'
 import { ChatAnthropic } from '@langchain/anthropic'
@@ -11,6 +11,7 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { addImagesToMessages, llmSupportsVision } from '../../src/multiModalUtils'
 import { ICommonObject, IDatabaseEntity, INodeData, ISeqAgentsState, IVisionChatModal } from '../../src/Interface'
 import { availableDependencies, defaultAllowBuiltInDep, getVars, prepareSandboxVars } from '../../src/utils'
+import { ChatPromptTemplate, BaseMessagePromptTemplateLike } from '@langchain/core/prompts'
 
 export const checkCondition = (input: string | number | undefined, condition: string, value: string | number = ''): boolean => {
     if (!input && condition === 'Is Empty') return true
@@ -211,7 +212,7 @@ export const restructureMessages = (llm: BaseChatModel, state: ISeqAgentsState) 
     const messages: BaseMessage[] = []
     for (const message of state.messages as unknown as BaseMessage[]) {
         // Sometimes Anthropic can return a message with content types of array, ignore that EXECEPT when tool calls are present
-        if ((message as any).tool_calls?.length) {
+        if ((message as any).tool_calls?.length && message.content !== '') {
             message.content = JSON.stringify(message.content)
         }
 
@@ -343,4 +344,35 @@ export class RunnableCallable<I = unknown, O = unknown> extends Runnable<I, O> {
 
         return returnValue
     }
+}
+
+export const checkMessageHistory = async (
+    nodeData: INodeData,
+    options: ICommonObject,
+    prompt: ChatPromptTemplate,
+    promptArrays: BaseMessagePromptTemplateLike[],
+    sysPrompt: string
+) => {
+    const messageHistory = nodeData.inputs?.messageHistory
+
+    if (messageHistory) {
+        const appDataSource = options.appDataSource as DataSource
+        const databaseEntities = options.databaseEntities as IDatabaseEntity
+        const vm = await getVM(appDataSource, databaseEntities, nodeData, {})
+        try {
+            const response = await vm.run(`module.exports = async function() {${messageHistory}}()`, __dirname)
+            if (!Array.isArray(response)) throw new Error('Returned message history must be an array')
+            if (sysPrompt) {
+                // insert at index 1
+                promptArrays.splice(1, 0, ...response)
+            } else {
+                promptArrays.unshift(...response)
+            }
+            prompt = ChatPromptTemplate.fromMessages(promptArrays)
+        } catch (e) {
+            throw new Error(e)
+        }
+    }
+
+    return prompt
 }

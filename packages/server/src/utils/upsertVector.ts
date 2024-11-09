@@ -1,29 +1,29 @@
 import { Request } from 'express'
 import * as fs from 'fs'
+import * as path from 'path'
 import { cloneDeep, omit } from 'lodash'
-import { ICommonObject, IMessage, addArrayFilesToStorage } from 'flowise-components'
-import telemetryService from '../services/telemetry'
+import { ICommonObject, IMessage, addArrayFilesToStorage, mapMimeTypeToInputField, mapExtToInputField } from 'flowise-components'
 import logger from '../utils/logger'
 import {
     buildFlow,
     constructGraphs,
     getAllConnectedNodes,
-    mapMimeTypeToInputField,
     findMemoryNode,
     getMemorySessionId,
     getAppVersion,
     getTelemetryFlowObj,
     getStartingNodes
 } from '../utils'
-import { utilValidateKey } from './validateKey'
-import { IncomingInput, INodeDirectedGraph, IReactFlowObject, chatType } from '../Interface'
+import { validateChatflowAPIKey } from './validateKey'
+import { IncomingInput, INodeDirectedGraph, IReactFlowObject, ChatType } from '../Interface'
 import { ChatFlow } from '../database/entities/ChatFlow'
 import { getRunningExpressApp } from '../utils/getRunningExpressApp'
 import { UpsertHistory } from '../database/entities/UpsertHistory'
 import { InternalFlowiseError } from '../errors/internalFlowiseError'
 import { StatusCodes } from 'http-status-codes'
 import { getErrorMessage } from '../errors/utils'
-
+import { v4 as uuidv4 } from 'uuid'
+import { FLOWISE_COUNTER_STATUS, FLOWISE_METRIC_COUNTERS } from '../Interface.Metrics'
 /**
  * Upsert documents
  * @param {Request} req
@@ -43,7 +43,7 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
         }
 
         if (!isInternal) {
-            const isKeyValidated = await utilValidateKey(req, chatflow)
+            const isKeyValidated = await validateChatflowAPIKey(req, chatflow)
             if (!isKeyValidated) {
                 throw new InternalFlowiseError(StatusCodes.UNAUTHORIZED, `Unauthorized`)
             }
@@ -53,22 +53,52 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
 
         if (files.length) {
             const overrideConfig: ICommonObject = { ...req.body }
-            const fileNames: string[] = []
             for (const file of files) {
+                const fileNames: string[] = []
                 const fileBuffer = fs.readFileSync(file.path)
 
                 const storagePath = await addArrayFilesToStorage(file.mimetype, fileBuffer, file.originalname, fileNames, chatflowid)
 
-                const fileInputField = mapMimeTypeToInputField(file.mimetype)
+                const fileInputFieldFromMimeType = mapMimeTypeToInputField(file.mimetype)
 
-                overrideConfig[fileInputField] = storagePath
+                const fileExtension = path.extname(file.originalname)
+
+                const fileInputFieldFromExt = mapExtToInputField(fileExtension)
+
+                let fileInputField = 'txtFile'
+
+                if (fileInputFieldFromExt !== 'txtFile') {
+                    fileInputField = fileInputFieldFromExt
+                } else if (fileInputFieldFromMimeType !== 'txtFile') {
+                    fileInputField = fileInputFieldFromExt
+                }
+
+                if (overrideConfig[fileInputField]) {
+                    const existingFileInputField = overrideConfig[fileInputField].replace('FILE-STORAGE::', '')
+                    const existingFileInputFieldArray = JSON.parse(existingFileInputField)
+
+                    const newFileInputField = storagePath.replace('FILE-STORAGE::', '')
+                    const newFileInputFieldArray = JSON.parse(newFileInputField)
+
+                    const updatedFieldArray = existingFileInputFieldArray.concat(newFileInputFieldArray)
+
+                    overrideConfig[fileInputField] = `FILE-STORAGE::${JSON.stringify(updatedFieldArray)}`
+                } else {
+                    overrideConfig[fileInputField] = storagePath
+                }
 
                 fs.unlinkSync(file.path)
+            }
+            if (overrideConfig.vars && typeof overrideConfig.vars === 'string') {
+                overrideConfig.vars = JSON.parse(overrideConfig.vars)
             }
             incomingInput = {
                 question: req.body.question ?? 'hello',
                 overrideConfig,
                 stopNodeId: req.body.stopNodeId
+            }
+            if (req.body.chatId) {
+                incomingInput.chatId = req.body.chatId
             }
         }
 
@@ -77,6 +107,8 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
         const parsedFlowData: IReactFlowObject = JSON.parse(flowData)
         const nodes = parsedFlowData.nodes
         const edges = parsedFlowData.edges
+
+        const apiMessageId = req.body.apiMessageId ?? uuidv4()
 
         let stopNodeId = incomingInput?.stopNodeId ?? ''
         let chatHistory: IMessage[] = []
@@ -87,10 +119,15 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
         const memoryNode = findMemoryNode(nodes, edges)
         let sessionId = getMemorySessionId(memoryNode, incomingInput, chatId, isInternal)
 
-        const vsNodes = nodes.filter(
-            (node) =>
-                node.data.category === 'Vector Stores' && !node.data.label.includes('Upsert') && !node.data.label.includes('Load Existing')
-        )
+        const vsNodes = nodes.filter((node) => node.data.category === 'Vector Stores')
+
+        // Get StopNodeId for vector store which has fielUpload
+        const vsNodesWithFileUpload = vsNodes.filter((node) => node.data.inputs?.fileUpload)
+        if (vsNodesWithFileUpload.length > 1) {
+            throw new InternalFlowiseError(StatusCodes.INTERNAL_SERVER_ERROR, 'Multiple vector store nodes with fileUpload enabled')
+        } else if (vsNodesWithFileUpload.length === 1 && !stopNodeId) {
+            stopNodeId = vsNodesWithFileUpload[0].data.id
+        }
 
         // Check if multiple vector store nodes exist, and if stopNodeId is specified
         if (vsNodes.length > 1 && !stopNodeId) {
@@ -127,6 +164,7 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
             question: incomingInput.question,
             chatHistory,
             chatId,
+            apiMessageId,
             sessionId: sessionId ?? '',
             chatflowid,
             appDataSource: appServer.AppDataSource,
@@ -138,7 +176,7 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
 
         const startingNodes = nodes.filter((nd) => startingNodeIds.includes(nd.data.id))
 
-        await appServer.chatflowPool.add(chatflowid, undefined, startingNodes, incomingInput?.overrideConfig)
+        await appServer.chatflowPool.add(chatflowid, undefined, startingNodes, incomingInput?.overrideConfig, chatId)
 
         // Save to DB
         if (upsertedResult['flowData'] && upsertedResult['result']) {
@@ -152,16 +190,14 @@ export const upsertVector = async (req: Request, isInternal: boolean = false) =>
             await appServer.AppDataSource.getRepository(UpsertHistory).save(upsertHistory)
         }
 
-        await telemetryService.createEvent({
-            name: `vector_upserted`,
-            data: {
-                version: await getAppVersion(),
-                chatlowId: chatflowid,
-                type: isInternal ? chatType.INTERNAL : chatType.EXTERNAL,
-                flowGraph: getTelemetryFlowObj(nodes, edges),
-                stopNodeId
-            }
+        await appServer.telemetry.sendTelemetry('vector_upserted', {
+            version: await getAppVersion(),
+            chatlowId: chatflowid,
+            type: isInternal ? ChatType.INTERNAL : ChatType.EXTERNAL,
+            flowGraph: getTelemetryFlowObj(nodes, edges),
+            stopNodeId
         })
+        appServer.metricsProvider?.incrementCounter(FLOWISE_METRIC_COUNTERS.VECTORSTORE_UPSERT, { status: FLOWISE_COUNTER_STATUS.SUCCESS })
 
         return upsertedResult['result'] ?? { result: 'Successfully Upserted' }
     } catch (e) {
